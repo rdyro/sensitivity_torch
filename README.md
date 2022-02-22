@@ -6,7 +6,7 @@ process.
 
 This package builds on top of [PyTorch](https://pytorch.org/). We also
 maintain an implementation in [JAX](https://github.com/google/jax)
-[here](.https://rdyro.github.io/sensitivity_jax/).
+[here](https://rdyro.github.io/sensitivity_jax/).
 
 ## Documentation
 
