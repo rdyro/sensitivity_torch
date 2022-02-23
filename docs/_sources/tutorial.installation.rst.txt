@@ -1,7 +1,10 @@
 Installation
 ============
 
-Install from source
+Install using pip
+::
+  $ pip install git+https://github.com/rdyro/sensitivity_torch.git
+or from source
 ::
   $ git clone git@github.com:rdyro/sensitivity_torch.git
   $ cd sensitivity_torch

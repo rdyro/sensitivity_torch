@@ -14,7 +14,11 @@ maintain an implementation in [JAX](https://github.com/google/jax)
 
 ## Installation
 
-Install from source
+Install using pip
+```bash
+$ pip install git+https://github.com/rdyro/sensitivity_torch.git
+```
+or from source
 ```bash
 $ git clone git@github.com:rdyro/sensitivity_torch.git
 $ cd sensitivity_torch
