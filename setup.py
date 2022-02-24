@@ -20,6 +20,13 @@ setup(
     ),
     license="MIT",
     packages=["sensitivity_torch", "sensitivity_torch.extras"],
-    install_requires=["torch", "tensorboard", "numpy", "scipy", "tqdm"],
+    install_requires=[
+        "torch",
+        "tensorboard",
+        "numpy",
+        "scipy",
+        "tqdm",
+        "matplotlib",
+    ],
     long_description=read("README.md"),
 )

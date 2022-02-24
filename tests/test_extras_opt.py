@@ -69,13 +69,11 @@ names = [
 ]
 OPTs = [
     objs.LS(),
-    objs.CE(verbose=True, max_it=30, method="cvx"),
+    objs.CE(verbose=True, max_it=30),
     objs.OPT_with_centers(objs.LS(), 2),
     # objs.OPT_with_diag(objs.LS()),
     objs.LS_with_diag(),
-    objs.OPT_with_diag(
-        objs.CE(verbose=True, max_it=30, method="cvx"),
-    ),
+    objs.OPT_with_diag(objs.CE(verbose=True, max_it=30)),
 ]
 param_list = [
     (1e-1,),
