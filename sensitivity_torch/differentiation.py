@@ -2,9 +2,20 @@ import functools, operator, pdb
 import torch
 from tqdm import tqdm
 
-JACOBIAN = torch.autograd.functional.jacobian
+# JACOBIAN = torch.autograd.functional.jacobian
+def JACOBIAN(fn, inputs, **kw):
+    kw.setdefault("vectorize", True)
+    return torch.autograd.functional.jacobian(fn, inputs, **kw)
+
+
 JACOBIAN.__doc__ = """Equivalent to torch.autograd.functional.jacobian"""
-HESSIAN = torch.autograd.functional.hessian
+
+# HESSIAN = torch.autograd.functional.hessian
+def HESSIAN(fn, inputs, **kw):
+    kw.setdefault("vectorize", True)
+    return torch.autograd.functional.hessian(fn, inputs, **kw)
+
+
 HESSIAN.__doc__ = """Equivalent to torch.autograd.functional.hessian"""
 
 
