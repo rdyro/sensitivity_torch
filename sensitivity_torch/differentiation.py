@@ -3,38 +3,34 @@ import torch
 from tqdm import tqdm
 
 # JACOBIAN = torch.autograd.functional.jacobian
-def JACOBIAN(fn, inputs, **kw):
-    kw.setdefault("vectorize", True)
-    return torch.autograd.functional.jacobian(fn, inputs, **kw)
+def JACOBIAN(fn, inputs, **config):
+    config.setdefault("vectorize", True)
+    return torch.autograd.functional.jacobian(fn, inputs, **config)
 
 
 JACOBIAN.__doc__ = """Equivalent to torch.autograd.functional.jacobian"""
 
 # HESSIAN = torch.autograd.functional.hessian
-def HESSIAN(fn, inputs, **kw):
-    kw.setdefault("vectorize", True)
-    return torch.autograd.functional.hessian(fn, inputs, **kw)
+def HESSIAN(fn, inputs, **config):
+    config.setdefault("vectorize", True)
+    return torch.autograd.functional.hessian(fn, inputs, **config)
 
 
 HESSIAN.__doc__ = """Equivalent to torch.autograd.functional.hessian"""
 
 
-def HESSIAN_CUSTOM(fn, args_, **kwargs):
-    args = args_
-    args = (
-        (args,)
-        if not (isinstance(args, list) or isinstance(args, tuple))
-        else tuple(args)
-    )
+def HESSIAN_CUSTOM(fn, args, **config):
+    single_input = not isinstance(args, (list, tuple))
+    args = (args,) if single_input else tuple(args)
 
     f = fn(*args)
     n = f.numel()
     if n == 1:
-        H = HESSIAN(fn, args, **kwargs)
+        H = HESSIAN(fn, args, **config)
         return H
     else:
         Hs = [
-            HESSIAN(lambda *args: fn(*args).reshape(-1)[i], args, **kwargs)
+            HESSIAN(lambda *args: fn(*args).reshape(-1)[i], args, **config)
             for i in range(n)
         ]
         Hs = [
@@ -51,16 +47,15 @@ def HESSIAN_CUSTOM(fn, args_, **kwargs):
         return Hs
 
 
-def HESSIAN_DIAG(fn, args, **kw):
+def HESSIAN_DIAG(fn, args, **config):
     """Generates a function which computes per-argument partial Hessians."""
-    args = (
-        (args,)
-        if not (isinstance(args, list) or isinstance(args, tuple))
-        else tuple(args)
-    )
+    single_input = not isinstance(args, (list, tuple))
+    args = (args,) if single_input else tuple(args)
     try:
         ret = [
-            HESSIAN(lambda arg: fn(*args[:i], arg, *args[i + 1 :]), arg, **kw)
+            HESSIAN(
+                lambda arg: fn(*args[:i], arg, *args[i + 1 :]), arg, **config
+            )
             for (i, arg) in enumerate(args)
         ]
     except RuntimeError:  # function has more than 1 output, need to use JACOBIAN
@@ -69,26 +64,71 @@ def HESSIAN_DIAG(fn, args, **kw):
                 lambda arg: JACOBIAN(
                     lambda arg: fn(*args[:i], arg, *args[i + 1 :]),
                     arg,
-                    create_graph=True,
-                    **kw,
+                    **dict(config, create_graph=True),
                 ),
                 arg,
-                **kw,
+                **config,
             )
             for (i, arg) in enumerate(args)
         ]
+    return ret[0] if single_input else ret
 
-    # from tqdm import tqdm
-    # ret = []
-    # for i in tqdm(range(len(args))):
-    #    arg = args[i]
-    #    ret.append(
-    #        HESSIAN(
-    #            lambda arg: fn(*args[:i], arg, *args[i + 1 :]), arg, **kwargs
-    #        )[0][0]
-    #    )
 
-    return ret
+def BATCH_JACOBIAN(fn, args, **config):
+    """Computes the Hessian, assuming the first in/out dimension is the batch."""
+    single_input = not isinstance(args, (list, tuple))
+    args = (args,) if single_input else tuple(args)
+    Js = JACOBIAN(lambda *args: torch.sum(fn(*args), 0), args, **config)
+    out_shapes = [J.shape[: -len(arg.shape)] for (J, arg) in zip(Js, args)]
+    Js = [
+        J.reshape((prod(out_shape),) + arg.shape)
+        .swapaxes(0, 1)
+        .reshape((arg.shape[0],) + out_shape + arg.shape[1:])
+        for (J, out_shape, arg) in zip(Js, out_shapes, args)
+    ]
+    return Js[0] if single_input else Js
+
+
+def BATCH_HESSIAN(fn, args, **config):
+    """Computes the Hessian, assuming the first in/out dimension is the batch."""
+    single_input = not isinstance(args, (list, tuple))
+    args = (args,) if single_input else tuple(args)
+    assert single_input
+    return BATCH_JACOBIAN(
+        lambda *args: BATCH_JACOBIAN(
+            fn, args, **dict(config, create_graph=True)
+        )[0],
+        args,
+        **config,
+    )[0]
+
+
+def BATCH_HESSIAN_DIAG(fn, args, **config):
+    """Evaluates per-argument partial batch (first dimension) Hessians."""
+    single_input = not isinstance(args, (list, tuple))
+    args = (args,) if single_input else tuple(args)
+    try:
+        ret = [
+            BATCH_HESSIAN(
+                lambda arg: fn(*args[:i], arg, *args[i + 1 :]), arg, **config
+            )
+            for (i, arg) in enumerate(args)
+        ]
+    except RuntimeError:  # function has more than 1 output, need to use JACOBIAN
+        assert False
+        ret = [
+            BATCH_JACOBIAN(
+                lambda arg: BATCH_JACOBIAN(
+                    lambda arg: fn(*args[:i], arg, *args[i + 1 :]),
+                    arg,
+                    **dict(config, create_graph=True),
+                ),
+                arg,
+                **config,
+            )
+            for (i, arg) in enumerate(args)
+        ]
+    return ret[0] if single_input else ret
 
 
 # fwd mode grads ###############################################################

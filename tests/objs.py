@@ -60,8 +60,8 @@ class OBJ:
         H = self.hess(*args).reshape((args[0].numel(), args[0].numel()))
         if T:
             H = torch.transpose(H, -1, -2)
-        rhs_ = rhs.reshape((H.shape[-1], -1))
-        return torch.linalg.solve(H, rhs).reshape(rhs.shape)
+        rhs_ = rhs.reshape(H.shape[:-1] + (-1,))
+        return torch.linalg.solve(H, rhs_).reshape(rhs.shape)
 
 
 class LS(OBJ):
@@ -93,7 +93,7 @@ class LS(OBJ):
             Z.shape[-1], **topts(Z)
         )
         rhs_shape = rhs.shape
-        rhs = rhs.reshape((A.shape[-1], -1))
+        rhs = rhs.reshape(A.shape[:-1] + (-1,))
         if T == True:
             F = torch.linalg.cholesky(A)
         else:
@@ -150,7 +150,7 @@ class CE(OBJ):
         Yp = X @ W
         Yp_aug = CE._Yp_aug(W, X)
         return (
-            -torch.sum(Y[..., :-1] * Yp) + torch.sum(torch.logsumexp(Yp_aug, 1))
+            -torch.sum(Y[..., :-1] * Yp) + torch.sum(torch.logsumexp(Yp_aug, -1))
         ) / X.shape[-2] + 0.5 * torch.sum((10.0 ** lam) * (W ** 2))
 
 

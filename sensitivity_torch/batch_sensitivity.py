@@ -9,9 +9,10 @@ from torch import Tensor
 
 from .utils import t, topts, ss, fn_with_sol_cache
 from .differentiation import JACOBIAN, HESSIAN, HESSIAN_DIAG, fwd_grad, grad
+from .differentiation import BATCH_JACOBIAN, BATCH_HESSIAN, BATCH_HESSIAN_DIAG
 from .specialized_matrix_inverse import solve_gmres, solve_cg
 
-_prod = lambda zs: reduce(mul, zs) if zs != () else 1
+prod = lambda zs: reduce(mul, zs, 1)
 
 
 def _generate_default_Dzk_solve_fn(optimizations: Mapping, k_fn):
@@ -26,20 +27,20 @@ def _generate_default_Dzk_solve_fn(optimizations: Mapping, k_fn):
     """
 
     def Dzk_solve_fn(z, *params, rhs=None, T=False):
-        zlen = z.numel()
+        blen, zlen = z.shape[0], prod(z.shape[1:])
         if optimizations.get("Dzk", None) is None:
-            optimizations["Dzk"] = JACOBIAN(lambda z: k_fn(z, *params), z)
+            optimizations["Dzk"] = BATCH_JACOBIAN(lambda z: k_fn(z, *params), z)
         Dzk = optimizations["Dzk"]
         if T:
             if optimizations.get("FT", None) is None:
                 optimizations["FT"] = torch.linalg.lu_factor(
-                    t(Dzk.reshape((zlen, zlen)))
+                    t(Dzk.reshape((blen, zlen, zlen)))
                 )
             return torch.lu_solve(rhs, *optimizations["FT"])
         else:
             if optimizations.get("F", None) is None:
                 optimizations["F"] = torch.linalg.lu_factor(
-                    Dzk.reshape((zlen, zlen))
+                    Dzk.reshape((blen, zlen, zlen))
                 )
             return torch.lu_solve(rhs, *optimizations["F"])
 
@@ -77,7 +78,8 @@ def implicit_jacobian(
         Jacobian/VJP/JVP as specified by arguments
     """
     optimizations = {} if optimizations is None else copy(optimizations)
-    zlen, plen = _prod(z.shape), [_prod(param.shape) for param in params]
+    blen, zlen = z.shape[0], prod(z.shape[1:])
+    plen = [prod(param.shape[1:]) for param in params]
     jvp_vec = _ensure_list(jvp_vec) if jvp_vec is not None else jvp_vec
 
     # construct a default Dzk_solve_fn ##########################
@@ -87,37 +89,38 @@ def implicit_jacobian(
 
     if Dg is not None:
         if matrix_free_inverse:
-            A_fn = lambda x: JACOBIAN(
-                lambda z: torch.sum(
-                    k_fn(z, *params).reshape(-1) * x.reshape(-1)
-                ),
-                z,
-            ).reshape(x.shape)
-            v = -solve_gmres(A_fn, Dg.reshape((zlen, 1)), max_it=300)
+            raise NotImplementedError
         else:
             Dzk_solve_fn = optimizations["Dzk_solve_fn"]
-            v = -Dzk_solve_fn(z, *params, rhs=Dg.reshape((zlen, 1)), T=True)
+            v = -Dzk_solve_fn(
+                z, *params, rhs=Dg.reshape((blen, zlen, 1)), T=True
+            )
         v = v.detach()
         fn = lambda *params: torch.sum(
-            v.reshape(zlen) * k_fn(z, *params).reshape(zlen)
+            v.reshape((blen, zlen)) * k_fn(z, *params).reshape((blen, zlen))
         )
         Dp = JACOBIAN(fn, params)
         Dp_shaped = [Dp.reshape(param.shape) for (Dp, param) in zip(Dp, params)]
         ret = Dp_shaped[0] if len(params) == 1 else Dp_shaped
     else:
         if jvp_vec is not None:
-            for param in params:
-                param.requires_grad = True
-            f_ = k_fn(z.detach(), *params)
-            Dp = [
-                fwd_grad(f_, param, grad_inputs=jvp_vec)
-                for (param, jvp_vec) in zip(params, jvp_vec)
-            ]
-            Dp = [Dp.reshape((zlen, 1)) for (Dp, plen) in zip(Dp, plen)]
+            Dp = _ensure_list(
+                torch.autograd.functional.jvp(
+                    lambda *params: k_fn(z, *params),
+                    tuple(params),
+                    tuple(jvp_vec),
+                )[1]
+            )
+            Dp = [Dp.reshape((blen, zlen, 1)) for (Dp, plen) in zip(Dp, plen)]
             Dpk = Dp
         else:
-            Dpk = JACOBIAN(lambda *params: k_fn(z, *params), params)
-            Dpk = [Dpk.reshape((zlen, plen)) for (Dpk, plen) in zip(Dpk, plen)]
+            Dpk = _ensure_list(
+                BATCH_JACOBIAN(lambda *params: k_fn(z, *params), params)
+            )
+            Dpk = [
+                Dpk.reshape((blen, zlen, plen))
+                for (Dpk, plen) in zip(Dpk, plen)
+            ]
 
         Dzk_solve_fn = optimizations["Dzk_solve_fn"]
         Dpz = [-Dzk_solve_fn(z, *params, rhs=Dpk, T=False) for Dpk in Dpk]
@@ -126,7 +129,7 @@ def implicit_jacobian(
             Dpz_shaped = [Dpz.reshape(z.shape) for Dpz in Dpz]
         else:
             Dpz_shaped = [
-                Dpz.reshape(z.shape + param.shape)
+                Dpz.reshape((blen,) + z.shape[1:] + param.shape[1:])
                 for (Dpz, param) in zip(Dpz, params)
             ]
         ret = Dpz_shaped if len(params) != 1 else Dpz_shaped[0]
@@ -156,7 +159,8 @@ def implicit_hessian(
         Hessian/chain rule Hessian as specified by arguments
     """
     optimizations = {} if optimizations is None else copy(optimizations)
-    zlen, plen = _prod(z.shape), [_prod(param.shape) for param in params]
+    blen, zlen = z.shape[0], prod(z.shape[1:])
+    plen = [prod(param.shape[1:]) for param in params]
     jvp_vec = _ensure_list(jvp_vec) if jvp_vec is not None else jvp_vec
     if jvp_vec is not None:
         assert Dg is not None
@@ -168,25 +172,21 @@ def implicit_hessian(
 
     # compute 2nd implicit gradients
     if Dg is not None:
-        assert Dg.numel() == zlen
-        assert Hg is None or Hg.numel() == zlen ** 2
+        assert Dg.numel() == blen * zlen
+        assert Hg is None or Hg.numel() == blen * zlen ** 2
 
-        Dg_ = Dg.reshape((zlen, 1))
-        Hg_ = Hg.reshape((zlen, zlen)) if Hg is not None else Hg
+        Dg_ = Dg.reshape((blen, zlen, 1))
+        Hg_ = Hg.reshape((blen, zlen, zlen)) if Hg is not None else Hg
 
         # compute the left hand vector in the VJP
         Dzk_solve_fn = optimizations["Dzk_solve_fn"]
-        v = -Dzk_solve_fn(z, *params, rhs=Dg_.reshape((zlen, 1)), T=True)
+        v = -Dzk_solve_fn(z, *params, rhs=Dg_.reshape((blen, zlen, 1)), T=True)
         v = v.detach()
         fn = lambda z, *params: torch.sum(
-            v.reshape(zlen) * k_fn(z, *params).reshape(zlen)
+            v.reshape((blen, zlen)) * k_fn(z, *params).reshape((blen, zlen))
         )
 
         if jvp_vec is not None:
-            for param in params:
-                param.requires_grad = True
-            z.requires_grad = True
-
             Dpz_jvp = _ensure_list(
                 implicit_jacobian(
                     k_fn,
@@ -196,47 +196,53 @@ def implicit_hessian(
                     optimizations=optimizations,
                 )
             )
-            Dpz_jvp = [Dpz_jvp.reshape(-1).detach() for Dpz_jvp in Dpz_jvp]
+            Dpz_jvp = [
+                Dpz_jvp.reshape((blen, -1)).detach() for Dpz_jvp in Dpz_jvp
+            ]
 
             # compute the 2nd order derivatives consisting of 4 terms
             # term 1 ##############################
-            # Dpp1 = HESSIAN_DIAG(lambda *params: fn(z, *params), *params)
-            g_ = grad(fn(z, *params), params, create_graph=True)
             Dpp1 = [
-                fwd_grad(g_, param, grad_inputs=jvp_vec).reshape(plen)
-                for (g_, param, jvp_vec) in zip(g_, params, jvp_vec)
+                torch.autograd.functional.jvp(
+                    lambda param: JACOBIAN(
+                        lambda param: fn(
+                            z, *params[:i], param, *params[i + 1 :]
+                        ),
+                        param,
+                        create_graph=True,
+                    ),
+                    param,
+                    jvp_vec[i],
+                )[1].reshape((blen, -1))
+                for (i, param) in enumerate(params)
             ]
 
             # term 2 ##############################
-            # temp = JACOBIAN(
-            #    lambda z: JACOBIAN(
-            #        lambda *params: fn(z, *params), *params, create_graph=True
-            #    ),
-            #    z,
-            # )
-            # temp = [temp] if len(params) == 1 else temp
-            # temp = [
-            #    temp.reshape((plen, zlen)) for (temp, plen) in zip(temp, plen)
-            # ]
-            # Dpp2 = [
-            #    (temp @ Dpz).reshape((plen, plen))
-            #    for (temp, Dpz, plen) in zip(temp, Dpz, plen)
-            # ]
-            g_ = grad(fn(z, *params), params, create_graph=True)
             Dpp2 = [
-                fwd_grad(g_, z, grad_inputs=Dpz_jvp.reshape(z.shape)).reshape(
-                    -1
-                )
-                for (g_, Dpz_jvp) in zip(g_, Dpz_jvp)
+                torch.autograd.functional.jvp(
+                    lambda z: BATCH_JACOBIAN(
+                        lambda param: fn(
+                            z, *params[:i], param, *params[i + 1 :]
+                        ),
+                        params[i],
+                        create_graph=True,
+                    ),
+                    z,
+                    Dpz_jvp.reshape(z.shape),
+                )[1].reshape((blen, -1))
+                for (i, (plen, Dpz_jvp)) in enumerate(zip(plen, Dpz_jvp))
             ]
 
             # term 3 ##############################
-            # Dpp3 = [t(Dpp2) for Dpp2 in Dpp2]
-            g_ = grad(fn(z, *params), z, create_graph=True)
-            g_ = [
-                fwd_grad(g_, param, grad_inputs=jvp_vec)
-                for (param, jvp_vec) in zip(params, jvp_vec)
-            ]
+            g_ = _ensure_list(
+                torch.autograd.functional.jvp(
+                    lambda *params: JACOBIAN(
+                        lambda z: fn(z, *params), z, create_graph=True
+                    ),
+                    params,
+                    tuple(jvp_vec),
+                )[1]
+            )
             Dpp3 = [
                 _ensure_list(
                     implicit_jacobian(
@@ -246,26 +252,28 @@ def implicit_hessian(
                         Dg=g_,
                         optimizations=optimizations,
                     )
-                )[i].reshape(-1)
+                )[i].reshape((blen, -1))
                 for (i, g_) in enumerate(g_)
             ]
 
             # term 4 ##############################
-            # Dzz = HESSIAN(lambda z: fn(z, *params), z).reshape((zlen, zlen))
-            # if Hg is not None:
-            #    Dpp4 = [t(Dpz) @ (Hg_ + Dzz) @ Dpz for Dpz in Dpz]
-            # else:
-            #    Dpp4 = [t(Dpz) @ Dzz @ Dpz for Dpz in Dpz]
-            g_ = grad(fn(z, *params), z, create_graph=True)
             g_ = [
-                fwd_grad(g_, z, grad_inputs=Dpz_jvp.reshape(z.shape))
+                torch.autograd.functional.jvp(
+                    lambda z: JACOBIAN(
+                        lambda z: fn(z, *params), z, create_graph=True
+                    ),
+                    z,
+                    Dpz_jvp.reshape(z.shape),
+                )[1]
                 for Dpz_jvp in Dpz_jvp
             ]
             if Hg is not None:
                 g_ = [
-                    g_.reshape(zlen) + Hg_ @ Dpz_jvp.reshape(zlen)
+                    g_.reshape((blen, zlen, 1))
+                    + Hg_ @ Dpz_jvp.reshape((blen, zlen, 1))
                     for (g_, Dpz_jvp) in zip(g_, Dpz_jvp)
                 ]
+
             Dpp4 = [
                 _ensure_list(
                     implicit_jacobian(
@@ -275,17 +283,17 @@ def implicit_hessian(
                         Dg=g_,
                         optimizations=optimizations,
                     )
-                )[i].reshape(plen)
+                )[i].reshape((blen, -1))
                 for ((i, g_), plen) in zip(enumerate(g_), plen)
             ]
             Dp = [
-                Dg_.reshape((1, zlen)) @ Dpz_jvp.reshape(zlen)
+                Dg_.reshape((blen, 1, zlen)) @ Dpz_jvp.reshape((blen, zlen, 1))
                 for Dpz_jvp in Dpz_jvp
             ]
             Dpp = [sum(Dpp) for Dpp in zip(Dpp1, Dpp2, Dpp3, Dpp4)]
 
             # return the results
-            Dp_shaped = [Dp.reshape(()) for Dp in Dp]
+            Dp_shaped = [Dp.reshape((blen,)) for Dp in Dp]
             Dpp_shaped = [
                 Dpp.reshape(param.shape) for (Dpp, param) in zip(Dpp, params)
             ]
@@ -300,43 +308,38 @@ def implicit_hessian(
                 )
             )
             Dpz = [
-                Dpz.reshape((zlen, plen)).detach()
+                Dpz.reshape((blen, zlen, plen)).detach()
                 for (Dpz, plen) in zip(Dpz, plen)
             ]
 
             # compute the 2nd order derivatives consisting of 4 terms
-            Dpp1 = HESSIAN_DIAG(lambda *params: fn(z, *params), params)
+            Dpp1 = BATCH_HESSIAN_DIAG(lambda *params: fn(z, *params), params)
             Dpp1 = [
-                Dpp1.reshape((plen, plen)) for (Dpp1, plen) in zip(Dpp1, plen)
+                Dpp1.reshape((blen, plen, plen))
+                for (Dpp1, plen) in zip(Dpp1, plen)
             ]
 
-            # temp = JACOBIAN(
-            #    lambda z: JACOBIAN(
-            #        lambda *params: fn(z, *params), params, create_graph=True
-            #    ),
-            #    z,
-            # )
-            temp = JACOBIAN(
+            temp = BATCH_JACOBIAN(
                 lambda *params: JACOBIAN(
                     lambda z: fn(z, *params), z, create_graph=True
                 ),
                 params,
             )
-            temp = [
-                temp.reshape((zlen, plen)).transpose(-1, -2)
-                for (temp, plen) in zip(temp, plen)
-            ]
             Dpp2 = [
-                (temp @ Dpz).reshape((plen, plen))
+                (t(temp.reshape((blen, zlen, plen))) @ Dpz).reshape(
+                    (blen, plen, plen)
+                )
                 for (temp, Dpz, plen) in zip(temp, Dpz, plen)
             ]
             Dpp3 = [t(Dpp2) for Dpp2 in Dpp2]
-            Dzz = HESSIAN(lambda z: fn(z, *params), z).reshape((zlen, zlen))
+            Dzz = BATCH_HESSIAN(lambda z: fn(z, *params), z).reshape(
+                (blen, zlen, zlen)
+            )
             if Hg is not None:
                 Dpp4 = [t(Dpz) @ (Hg_ + Dzz) @ Dpz for Dpz in Dpz]
             else:
                 Dpp4 = [t(Dpz) @ Dzz @ Dpz for Dpz in Dpz]
-            Dp = [Dg_.reshape((1, zlen)) @ Dpz for Dpz in Dpz]
+            Dp = [Dg_.reshape((blen, 1, zlen)) @ Dpz for Dpz in Dpz]
             Dpp = [sum(Dpp) for Dpp in zip(Dpp1, Dpp2, Dpp3, Dpp4)]
 
             # return the results
@@ -344,7 +347,7 @@ def implicit_hessian(
                 Dp.reshape(param.shape) for (Dp, param) in zip(Dp, params)
             ]
             Dpp_shaped = [
-                Dpp.reshape(param.shape + param.shape)
+                Dpp.reshape((blen,) + 2 * param.shape[1:])
                 for (Dpp, param) in zip(Dpp, params)
             ]
         return (
@@ -361,53 +364,57 @@ def implicit_hessian(
             optimizations=optimizations,
         )
         Dpz = _ensure_list(Dpz)
-        Dpz = [Dpz.reshape(zlen, plen) for (Dpz, plen) in zip(Dpz, plen)]
+        Dpz = [
+            Dpz.reshape((blen, zlen, plen)) for (Dpz, plen) in zip(Dpz, plen)
+        ]
 
         # compute derivatives
         if optimizations.get("Dzzk", None) is None:
-            Hk = HESSIAN_DIAG(k_fn, (z, *params))
+            Hk = BATCH_HESSIAN_DIAG(k_fn, (z, *params))
             Dzzk, Dppk = Hk[0], Hk[1:]
             optimizations["Dzzk"] = Dzzk
         else:
-            Dppk = HESSIAN_DIAG(lambda *params: k_fn(z, *params), params)
-        Dzpk = JACOBIAN(
-            lambda *params: JACOBIAN(
+            Dppk = BATCH_HESSIAN_DIAG(lambda *params: k_fn(z, *params), params)
+        Dppk = [
+            Dppk.reshape((blen, zlen, plen, plen))
+            for (Dppk, plen) in zip(Dppk, plen)
+        ]
+        Dzpk = BATCH_JACOBIAN(
+            lambda *params: BATCH_JACOBIAN(
                 lambda z: k_fn(z, *params), z, create_graph=True
             ),
             params,
         )
-        Dppk = [
-            Dppk.reshape((zlen, plen, plen)) for (Dppk, plen) in zip(Dppk, plen)
-        ]
-        Dzzk = Dzzk.reshape((zlen, zlen, zlen))
+        Dzzk = Dzzk.reshape((blen, zlen, zlen, zlen))
         Dzpk = [
-            Dzpk.reshape((zlen, zlen, plen)) for (Dzpk, plen) in zip(Dzpk, plen)
+            Dzpk.reshape((blen, zlen, zlen, plen))
+            for (Dzpk, plen) in zip(Dzpk, plen)
         ]
-        Dpzk = [Dzpk.transpose(-1, -2) for Dzpk in Dzpk]
+        Dpzk = [t(Dzpk) for Dzpk in Dzpk]
 
         # solve the IFT equation
         lhs = [
             Dppk
-            + Dpzk @ Dpz[None, ...]
-            + t(Dpz)[None, ...] @ Dzpk
-            + (t(Dpz)[None, ...] @ Dzzk) @ Dpz[None, ...]
+            + Dpzk @ Dpz[:, None, ...]
+            + t(Dpz)[:, None, ...] @ Dzpk
+            + (t(Dpz)[:, None, ...] @ Dzzk) @ Dpz[:, None, ...]
             for (Dpz, Dzpk, Dpzk, Dppk) in zip(Dpz, Dzpk, Dpzk, Dppk)
         ]
         Dzk_solve_fn = optimizations["Dzk_solve_fn"]
         Dppz = [
             -Dzk_solve_fn(
-                z, *params, rhs=lhs.reshape((zlen, plen * plen)), T=False
-            ).reshape((zlen, plen, plen))
+                z, *params, rhs=lhs.reshape((blen, zlen, plen * plen)), T=False
+            ).reshape((blen, zlen, plen, plen))
             for (lhs, plen) in zip(lhs, plen)
         ]
 
         # return computed values
         Dpz_shaped = [
-            Dpz.reshape(z.shape + param.shape)
+            Dpz.reshape((blen,) + z.shape[1:] + param.shape[1:])
             for (Dpz, param) in zip(Dpz, params)
         ]
         Dppz_shaped = [
-            Dppz.reshape(z.shape + param.shape + param.shape)
+            Dppz.reshape((blen,) + z.shape[1:] + 2 * param.shape[1:])
             for (Dppz, param) in zip(Dppz, params)
         ]
         return (
@@ -478,12 +485,14 @@ def generate_optimization_fns(
         g = JACOBIAN(loss_fn, (z, *params))
 
         if optimizations.get("Hz_fn", None) is None:
-            optimizations["Hz_fn"] = lambda z, *params: HESSIAN_DIAG(
+            optimizations["Hz_fn"] = lambda z, *params: BATCH_HESSIAN_DIAG(
                 lambda z: loss_fn(z, *params), (z,)
             )[0]
         Hz_fn = optimizations["Hz_fn"]
         Hz = Hz_fn(z, *params)
-        H = [Hz] + HESSIAN_DIAG(lambda *params: loss_fn(z, *params), params)
+        H = [Hz] + BATCH_HESSIAN_DIAG(
+            lambda *params: loss_fn(z, *params), params
+        )
 
         Dp, Dpp = implicit_hessian(
             k_fn,

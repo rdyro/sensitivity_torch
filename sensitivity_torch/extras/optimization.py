@@ -1,10 +1,11 @@
 ##^# library imports and utils #################################################
 import math, os, pdb, sys, time
-from typing import Callable
+from typing import Callable, Union
 
 import torch, numpy as np
 from torch import Tensor
-from tqdm import tqdm
+import tqdm as tqdm_module
+import tqdm.notebook
 
 from ..utils import TablePrinter
 
@@ -23,7 +24,9 @@ def minimize_agd(
     full_output: bool = False,
     callback_fn: Callable = None,
     use_writer: bool = False,
-    use_tqdm: bool = True,
+    use_tqdm: Union[
+        bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook
+    ] = True,
 ):
     """Minimize a loss function ``f_fn`` with Accelerated Gradient Descent (AGD)
     with respect to ``*args``. Uses PyTorch.
@@ -45,6 +48,14 @@ def minimize_agd(
     Returns:
         Optimized ``args`` or ``(args, args_hist)`` if ``full_output`` is ``True``
     """
+    if isinstance(use_tqdm, bool):
+        if use_tqdm:
+            print_fn, rng_wrapper = tqdm_module.tqdm.write, tqdm_module.tqdm
+        else:
+            print_fn, rng_wrapper = print, lambda x: x
+    else:
+        print_fn, rng_wrapper = use_tqdm.write, use_tqdm
+
     assert len(args) > 0
     assert g_fn is not None or all(
         [isinstance(arg, torch.Tensor) for arg in args]
@@ -66,11 +77,9 @@ def minimize_agd(
     if callback_fn is not None:
         callback_fn(*args)
 
-    print_fn = print if not use_tqdm else tqdm.write
     if verbose:
         print_fn(tp.make_header())
-    it_rng = range(max_it) if not use_tqdm else tqdm(range(max_it))
-    for it in it_rng:
+    for it in rng_wrapper(range(max_it)):
         args_prev = [arg.clone().detach() for arg in args]
         opt.zero_grad()
         if g_fn is None:
@@ -136,7 +145,9 @@ def minimize_lbfgs(
     full_output: bool = False,
     callback_fn: Callable = None,
     use_writer: bool = False,
-    use_tqdm: bool = True,
+    use_tqdm: Union[
+        bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook
+    ] = True,
 ):
     """Minimize a loss function ``f_fn`` with L-BFGS with respect to ``*args``.
     Taken from PyTorch.
@@ -157,6 +168,14 @@ def minimize_lbfgs(
     Returns:
         Optimized ``args`` or ``(args, args_hist)`` if ``full_output`` is ``True``
     """
+    if isinstance(use_tqdm, bool):
+        if use_tqdm:
+            print_fn, rng_wrapper = tqdm_module.tqdm.write, tqdm_module.tqdm
+        else:
+            print_fn, rng_wrapper = print, lambda x: x
+    else:
+        print_fn, rng_wrapper = use_tqdm.write, use_tqdm
+
     assert len(args) > 0
     assert g_fn is not None or all(
         [isinstance(arg, torch.Tensor) for arg in args]
@@ -194,11 +213,9 @@ def minimize_lbfgs(
         prefix=verbose_prefix,
         use_writer=use_writer,
     )
-    print_fn = print if not use_tqdm else tqdm.write
     if verbose:
         print_fn(tp.make_header())
-    it_rng = range(max_it) if not use_tqdm else tqdm(range(max_it))
-    for it in it_rng:
+    for it in rng_wrapper(range(max_it)):
         args_prev = [arg.detach().clone() for arg in args]
         l = opt.step(closure)
         if full_output:
@@ -323,7 +340,9 @@ def minimize_sqp(
     full_output: bool = False,
     callback_fn: Callable = None,
     use_writer: bool = False,
-    use_tqdm: bool = True,
+    use_tqdm: Union[
+        bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook
+    ] = True,
 ):
     """Minimize a loss function ``f_fn`` with Unconstrained Sequential Quadratic
     Programming (SQP) with respect to a single ``arg``.
@@ -347,6 +366,14 @@ def minimize_sqp(
     Returns:
         Optimized ``args`` or ``(args, args_hist)`` if ``full_output`` is ``True``
     """
+    if isinstance(use_tqdm, bool):
+        if use_tqdm:
+            print_fn, rng_wrapper = tqdm_module.tqdm.write, tqdm_module.tqdm
+        else:
+            print_fn, rng_wrapper = print, lambda x: x
+    else:
+        print_fn, rng_wrapper = use_tqdm.write, use_tqdm
+
     if len(args) > 1:
         raise ValueError("SQP only only supports single variable functions")
     x = args[0]
@@ -369,11 +396,9 @@ def minimize_sqp(
         prefix=verbose_prefix,
         use_writer=use_writer,
     )
-    print_fn = print if not use_tqdm else tqdm.write
     if verbose:
         print_fn(tp.make_header())
-    it_rng = range(max_it) if not use_tqdm else tqdm(range(max_it))
-    for it in it_rng:
+    for it in rng_wrapper(range(max_it)):
         g = g_fn(x).reshape((M, x_size))
         H = h_fn(x).reshape((M, x_size, x_size))
         if torch.any(torch.isnan(g)):
