@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "sensitivity-torch"
+version = "0.1.0"
+description = "Optimization Sensitivity Analysis for Bilevel Programming for Torch"
+authors = ["Robert Dyro <rdyro@stanford.com>"]
+readme = "README.md"
+packages = [{include = "sensitivity_torch"}]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.8,<3.12"
+torch = "^1.8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
