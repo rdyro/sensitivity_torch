@@ -52,6 +52,38 @@ n2t = lambda x, device=None, dtype=None: torch.as_tensor(
     x, device=device, dtype=dtype
 )
 
+
+def scale_down(X, size=2, width=None, height=None):
+    kernel = torch.ones((1, 1, size, size), **topts(X)) / (size ** 2)
+
+    assert X.ndim == 2 or X.ndim == 3 or (X.ndim == 4 and X.shape[1] == 1)
+    if X.ndim == 2:
+        height = width if width is not None else round(math.sqrt(X.shape[-1]))
+        width = X.shape[-1] // height
+        Z = X.reshape((X.shape[0], 1, height, width))
+    elif X.ndim == 3:
+        height, width = X.shape[-2:]
+        Z = X[:, None, :, :]
+    elif X.ndim == 4:
+        assert X.shape[1] == 1
+        height, width = X.shape[-2:]
+        Z = X  # do nothing
+
+    Z = torch.nn.functional.conv2d(
+        Z, kernel, stride=(size, size), padding="valid"
+    )
+    Z = Z.reshape((Z.shape[0], Z.shape[1], height // size, width // size))
+
+    if X.ndim == 2:
+        Z = Z.reshape((X.shape[0], -1))
+    elif X.ndim == 3:
+        Z = Z[:, 0, :, :]
+    elif X.ndim == 4:
+        Z = Z
+
+    return Z
+
+
 ##$#############################################################################
 ##^# timing ####################################################################
 def elapsed(name, t1, end=None):
@@ -159,12 +191,8 @@ def to_tuple(*args):
 
 def fn_with_sol_cache(fwd_fn, cache=None):
     def inner_decorator(fn):
-        #def fn2(*args, **kwargs):
-        #    return fn(fwd_fn(*args), *args, **kwargs)
-        #return fn2
-
         nonlocal cache
-        cache = cache if cache is None else cache
+        cache = dict() if cache is None else cache
 
         def fn_with_sol(*args, **kwargs):
             cache, sol_key = fn_with_sol.cache, to_tuple(*args)

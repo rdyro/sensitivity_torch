@@ -1,6 +1,6 @@
 ##^# library imports and utils #################################################
 import math, os, pdb, sys, time
-from typing import Callable, Union
+from typing import Callable, Union, Mapping
 
 import torch, numpy as np
 from torch import Tensor
@@ -27,6 +27,9 @@ def minimize_agd(
     use_tqdm: Union[
         bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook
     ] = True,
+    optimizer: str = "adam",
+    optimizer_state: Mapping = None,
+    optimizer_opts: Mapping = None,
 ):
     """Minimize a loss function ``f_fn`` with Accelerated Gradient Descent (AGD)
     with respect to ``*args``. Uses PyTorch.
@@ -65,17 +68,29 @@ def minimize_agd(
         arg.requires_grad = True
     imprv = float("inf")
     gam = (af / ai) ** (1.0 / max_it)
-    opt = torch.optim.Adam(args, lr=ai)
+
+    # make the optimizer
+    optimizer_opts = {} if optimizer_opts is None else optimizer_opts
+    if optimizer.lower() == "adam":
+        opt = torch.optim.Adam(args, lr=ai, **optimizer_opts)
+    elif optimizer.lower() == "sgd":
+        opt = torch.optim.SGD(args, lr=ai, **optimizer_opts)
+    elif optimizer.lower() == "rmsprop":
+        opt = torch.optim.RMSprop(args, lr=ai, **optimizer_opts)
+    if optimizer_state is not None:
+        opt.load_state_dict(optimizer_state)
+
     tp = TablePrinter(
         ["it", "imprv", "loss", "||g||_2"],
         ["%05d", "%9.4e", "%9.4e", "%9.4e"],
         prefix=verbose_prefix,
         use_writer=use_writer,
     )
-    args_hist = [[arg.detach().clone() for arg in args]]
+    #args_hist = [[arg.detach().clone() for arg in args]]
+    args_hist, grads_hist = [], []
 
     if callback_fn is not None:
-        callback_fn(*args)
+        callback_fn(*args, step=-1, optimizer=opt)
 
     if verbose:
         print_fn(tp.make_header())
@@ -98,9 +113,16 @@ def minimize_agd(
             torch.norm(arg.grad) for arg in args if arg.grad is not None
         ).detach() / len(args)
         opt.step()
-        args_hist.append([arg.detach().clone() for arg in args])
+        if full_output:
+            args_hist.append([arg.detach().clone() for arg in args])
+            grads_hist.append(
+                [
+                    arg.grad.detach().clone() if arg.grad is not None else None
+                    for arg in args
+                ]
+            )
         if callback_fn is not None:
-            callback_fn(*args)
+            callback_fn(*args, step=it, optimizer=opt)
         if batched:
             imprv = sum(
                 torch.mean(
@@ -115,8 +137,10 @@ def minimize_agd(
                 torch.norm(arg_prev - arg)
                 for (arg, arg_prev) in zip(args, args_prev)
             )
-        if verbose:
-            print_fn(tp.make_values([it, imprv.detach(), l.detach(), g_norm]))
+        if verbose or use_writer:
+            values = tp.make_values([it, imprv.detach(), l.detach(), g_norm])
+            if verbose:
+                print_fn(values)
         for pgroup in opt.param_groups:
             pgroup["lr"] *= gam
         it += 1
@@ -125,8 +149,9 @@ def minimize_agd(
     ret = [arg.detach() for arg in args]
     ret = ret if len(args) > 1 else ret[0]
     args_hist = [z if len(args) > 1 else z[0] for z in args_hist]
+    grads_hist = [z if z is None or len(args) > 1 else z[0] for z in grads_hist]
     if full_output:
-        return ret, args_hist
+        return ret, args_hist, grads_hist
     else:
         return ret
 
@@ -186,7 +211,8 @@ def minimize_lbfgs(
     imprv = float("inf")
     it = 0
     opt = torch.optim.LBFGS(args, lr=lr)
-    args_hist = [[arg.detach().clone() for arg in args]]
+    #args_hist = [[arg.detach().clone() for arg in args]]
+    args_hist, grads_hist = [], []
 
     if callback_fn is not None:
         callback_fn(*args)
@@ -220,6 +246,12 @@ def minimize_lbfgs(
         l = opt.step(closure)
         if full_output:
             args_hist.append([arg.detach().clone() for arg in args])
+            grads_hist.append(
+                [
+                    arg.grad.detach().clone() if arg.grad is not None else None
+                    for arg in args
+                ]
+            )
         if callback_fn is not None:
             callback_fn(*args)
         if batched:
@@ -250,8 +282,9 @@ def minimize_lbfgs(
     ret = [arg.detach() for arg in args]
     ret = ret if len(args) > 1 else ret[0]
     args_hist = [z if len(args) > 1 else z[0] for z in args_hist]
+    grads_hist = [z if z is None or len(args) > 1 else z[0] for z in grads_hist]
     if full_output:
-        return ret, args_hist
+        return ret, args_hist, grads_hist
     else:
         return ret
 
