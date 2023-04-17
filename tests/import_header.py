@@ -1,4 +1,6 @@
-import sys, os
+import sys
+from pathlib import Path
 
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+for path in [Path(__file__).absolute().parents[i] for i in range(2)]:
+    if str(path) not in sys.path:
+        sys.path.append(str(path))

@@ -1,8 +1,9 @@
-import functools, operator, pdb
+import functools
+import operator
 import torch
 from tqdm import tqdm
 
-# JACOBIAN = torch.autograd.functional.jacobian
+
 def JACOBIAN(fn, inputs, **config):
     config.setdefault("vectorize", True)
     return torch.autograd.functional.jacobian(fn, inputs, **config)
@@ -10,7 +11,7 @@ def JACOBIAN(fn, inputs, **config):
 
 JACOBIAN.__doc__ = """Equivalent to torch.autograd.functional.jacobian"""
 
-# HESSIAN = torch.autograd.functional.hessian
+
 def HESSIAN(fn, inputs, **config):
     config.setdefault("vectorize", True)
     return torch.autograd.functional.hessian(fn, inputs, **config)
@@ -26,24 +27,16 @@ def HESSIAN_CUSTOM(fn, args, **config):
     f = fn(*args)
     n = f.numel()
     if n == 1:
-        H = HESSIAN(fn, args, **config)
-        return H
+        return HESSIAN(fn, args, **config)
     else:
-        Hs = [
-            HESSIAN(lambda *args: fn(*args).reshape(-1)[i], args, **config)
-            for i in range(n)
-        ]
+        Hs = [HESSIAN(lambda *args: fn(*args).reshape(-1)[i], args, **config) for i in range(n)]
         Hs = [
             [
-                torch.stack([Hs[k][i][j] for k in range(n)], 0).reshape(
-                    f.shape + Hs[0][i][j].shape
-                )
+                torch.stack([Hs[k][i][j] for k in range(n)], 0).reshape(f.shape + Hs[0][i][j].shape)
                 for i in range(len(args))
             ]
             for j in range(len(args))
         ]
-        # if len(args) == 1:
-        #    Hs = Hs[0][0]
         return Hs
 
 
@@ -53,9 +46,7 @@ def HESSIAN_DIAG(fn, args, **config):
     args = (args,) if single_input else tuple(args)
     try:
         ret = [
-            HESSIAN(
-                lambda arg: fn(*args[:i], arg, *args[i + 1 :]), arg, **config
-            )
+            HESSIAN(lambda arg: fn(*args[:i], arg, *args[i + 1 :]), arg, **config)
             for (i, arg) in enumerate(args)
         ]
     except RuntimeError:  # function has more than 1 output, need to use JACOBIAN
@@ -95,9 +86,7 @@ def BATCH_HESSIAN(fn, args, **config):
     args = (args,) if single_input else tuple(args)
     assert single_input
     return BATCH_JACOBIAN(
-        lambda *args: BATCH_JACOBIAN(
-            fn, args, **dict(config, create_graph=True)
-        )[0],
+        lambda *args: BATCH_JACOBIAN(fn, args, **dict(config, create_graph=True))[0],
         args,
         **config,
     )[0]
@@ -109,9 +98,7 @@ def BATCH_HESSIAN_DIAG(fn, args, **config):
     args = (args,) if single_input else tuple(args)
     try:
         ret = [
-            BATCH_HESSIAN(
-                lambda arg: fn(*args[:i], arg, *args[i + 1 :]), arg, **config
-            )
+            BATCH_HESSIAN(lambda arg: fn(*args[:i], arg, *args[i + 1 :]), arg, **config)
             for (i, arg) in enumerate(args)
         ]
     except RuntimeError:  # function has more than 1 output, need to use JACOBIAN
@@ -131,7 +118,7 @@ def BATCH_HESSIAN_DIAG(fn, args, **config):
     return ret[0] if single_input else ret
 
 
-# fwd mode grads ###############################################################
+####################################################################################################
 def prod(x):
     return functools.reduce(operator.mul, x, 1)
 
@@ -159,24 +146,17 @@ def fwd_grad(ys, xs, grad_inputs=None, **kwargs):
 
     # perform the first step of forward mode emulation in reverse mode AD
     vs_ = [torch.ones_like(y, requires_grad=True) for y in ys_select]
-    gs_ = torch.autograd.grad(
-        ys_select, xs, grad_outputs=vs_, create_graph=True, allow_unused=True
-    )
+    gs_ = torch.autograd.grad(ys_select, xs, grad_outputs=vs_, create_graph=True, allow_unused=True)
 
     # perform the second step of reverse mode emulation in reverse mode AD
     if grad_inputs is not None:
         # apply the JVP if necessary
-        gs_ = torch.autograd.grad(
-            gs_, vs_, grad_outputs=grad_inputs, allow_unused=True
-        )
+        gs_ = torch.autograd.grad(gs_, vs_, grad_outputs=grad_inputs, allow_unused=True)
     else:
         gs_ = torch.autograd.grad(gs_, vs_, allow_unused=True)
 
     # fill in the unused outputs with zeros (rather than None)
-    gs_ = [
-        torch.zeros_like(y) if g is None else g
-        for (g, y) in zip(gs_, ys_select)
-    ]
+    gs_ = [torch.zeros_like(y) if g is None else g for (g, y) in zip(gs_, ys_select)]
 
     # fill in the outputs which did not have gradient paths
     ret = write_list_at([torch.zeros_like(y) for y in ys_], idxs, gs_)
@@ -190,18 +170,7 @@ def grad(y, xs, **kwargs):
     return gs[0] if not (isinstance(xs, list) or isinstance(xs, tuple)) else gs
 
 
-##^# torch #####################################################################
-def prod(x):
-    return functools.reduce(operator.mul, x, 1)
-
-
-def write_list_at(xs, idxs, els):
-    assert len(idxs) == len(els)
-    k, xs = 0, [x for x in xs]
-    for idx in idxs:
-        xs[idx] = els[k]
-        k += 1
-    return xs
+####################################################################################################
 
 
 def reshape_linear(fs):
@@ -243,10 +212,6 @@ def torch_grad(
     def g_fn(*args, **kwargs):
         args = list(args)
         argnums_ = list(argnums) if hasattr(argnums, "__iter__") else [argnums]
-        # req_grads = [
-        #    torch.as_tensor(arg).requires_grad if i in argnums_ else False
-        #    for (i, arg) in enumerate(args)
-        # ]
         for i in range(len(args)):
             if i in argnums_:
                 args[i] = torch.as_tensor(args[i])
@@ -259,9 +224,7 @@ def torch_grad(
             f_org_shape = f.shape
             f = f.reshape(f.shape[:bdims] + (-1,))
             Js = [
-                torch.zeros(
-                    (f.shape[-1],) + garg.shape, dtype=f.dtype, device=f.device
-                )
+                torch.zeros((f.shape[-1],) + garg.shape, dtype=f.dtype, device=f.device)
                 for garg in gargs
             ]
             rng = tqdm(range(f.shape[-1])) if verbose else range(f.shape[-1])
@@ -273,10 +236,7 @@ def torch_grad(
                         gargs,
                         create_graph=create_graph,
                         retain_graph=(
-                            create_graph
-                            or j < len(fs) - 1
-                            or i < f.shape[-1] - 1
-                            or retain_graph
+                            create_graph or j < len(fs) - 1 or i < f.shape[-1] - 1 or retain_graph
                         ),
                         allow_unused=True,
                     )
@@ -286,15 +246,15 @@ def torch_grad(
                     g
                     if g is not None
                     else torch.zeros(
-                        gargs[l].shape,
-                        dtype=gargs[l].dtype,
-                        device=gargs[l].device,
+                        gargs[k].shape,
+                        dtype=gargs[k].dtype,
+                        device=gargs[k].device,
                     )
-                    for (l, g) in enumerate(gs)
+                    for (k, g) in enumerate(gs)
                 ]
                 for k in range(len(Js)):
                     Js[k][i, ...] = gs[k].reshape((-1,) + gs[k].shape)
-            for (k, J) in enumerate(Js):
+            for k, J in enumerate(Js):
                 lshp = f_org_shape[bdims:]
                 bshp = gargs[k].shape[:bdims]
                 rshp = gargs[k].shape[bdims:]
@@ -307,9 +267,6 @@ def torch_grad(
                 G[j] = tuple(Js)
             else:
                 G[j] = Js[0]
-        # for i in range(len(args)):
-        #    if i in argnums_:
-        #        args[i].requires_grad = req_grads[i]
 
         ret = reshape_struct(G, tree)
         return ret
@@ -319,10 +276,5 @@ def torch_grad(
 
 def torch_hessian(fn, argnums=0, bdims=0, create_graph=False):
     g_fn = torch_grad(fn, argnums=argnums, bdims=bdims, create_graph=True)
-    g2_fn = torch_grad(
-        g_fn, argnums=argnums, bdims=bdims, create_graph=create_graph
-    )
+    g2_fn = torch_grad(g_fn, argnums=argnums, bdims=bdims, create_graph=create_graph)
     return g2_fn
-
-
-##$#############################################################################

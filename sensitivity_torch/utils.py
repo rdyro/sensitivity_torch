@@ -1,20 +1,18 @@
-##^# ops import and utils ######################################################
-import os, pickle, time as time_module, pdb, math
-from pprint import pprint
-from collections import OrderedDict as odict
+####################################################################################################
+import time as time_module
+import math
 from operator import itemgetter
 
-import torch, numpy as np
-from torch.utils.tensorboard import SummaryWriter
+import torch
+import numpy as np
 
 
-##$#############################################################################
-##^# torch utils ###############################################################
+####################################################################################################
 def topts(A):
     return dict(device=A.device, dtype=A.dtype)
 
 
-ss = lambda x, dim=(): torch.sum(x ** 2, dim=dim)
+ss = lambda x, dim=(): torch.sum(x**2, dim=dim)
 t = lambda x: x.transpose(-1, -2)
 diag = lambda x: x.diagonal(0, -1, -2)
 vec = lambda x: x.reshape(-1)
@@ -29,9 +27,7 @@ is_equal = (
 def normalize(x, dim=-2, params=None, min_std=1e-3):
     if params is None:
         x_mu = torch.mean(x, dim, keepdim=True)
-        x_std = torch.maximum(
-            torch.std(x, dim, keepdim=True), torch.tensor(min_std, **topts(x))
-        )
+        x_std = torch.maximum(torch.std(x, dim, keepdim=True), torch.tensor(min_std, **topts(x)))
     else:
         x_mu, x_std = params
     return (x - x_mu) / x_std, (x_mu, x_std)
@@ -48,13 +44,11 @@ t2n = (
     if isinstance(x, torch.Tensor)
     else x
 )
-n2t = lambda x, device=None, dtype=None: torch.as_tensor(
-    x, device=device, dtype=dtype
-)
+n2t = lambda x, device=None, dtype=None: torch.as_tensor(x, device=device, dtype=dtype)
 
 
 def scale_down(X, size=2, width=None, height=None):
-    kernel = torch.ones((1, 1, size, size), **topts(X)) / (size ** 2)
+    kernel = torch.ones((1, 1, size, size), **topts(X)) / (size**2)
 
     assert X.ndim == 2 or X.ndim == 3 or (X.ndim == 4 and X.shape[1] == 1)
     if X.ndim == 2:
@@ -69,9 +63,7 @@ def scale_down(X, size=2, width=None, height=None):
         height, width = X.shape[-2:]
         Z = X  # do nothing
 
-    Z = torch.nn.functional.conv2d(
-        Z, kernel, stride=(size, size), padding="valid"
-    )
+    Z = torch.nn.functional.conv2d(Z, kernel, stride=(size, size), padding="valid")
     Z = Z.reshape((Z.shape[0], Z.shape[1], height // size, width // size))
 
     if X.ndim == 2:
@@ -84,8 +76,7 @@ def scale_down(X, size=2, width=None, height=None):
     return Z
 
 
-##$#############################################################################
-##^# timing ####################################################################
+####################################################################################################
 def elapsed(name, t1, end=None):
     t2 = time_module.time()
     name = name if len(name) <= 20 else name[:17] + "..."
@@ -97,20 +88,20 @@ def elapsed(name, t1, end=None):
 
 
 time = time_module.time
-##$#############################################################################
-##^# table printing utility class ##############################################
+
+
+####################################################################################################
 class TablePrinter:
     def __init__(self, names, fmts=None, prefix="", use_writer=False):
         self.names = names
         self.fmts = fmts if fmts is not None else ["%9.4e" for _ in names]
-        self.widths = [
-            max(self.calc_width(fmt), len(name)) + 2
-            for (fmt, name) in zip(fmts, names)
-        ]
+        self.widths = [max(self.calc_width(fmt), len(name)) + 2 for (fmt, name) in zip(fmts, names)]
         self.prefix = prefix
         self.writer = None
         if use_writer:
             try:
+                from torch.utils.tensorboard import SummaryWriter
+
                 self.writer = SummaryWriter(flush_secs=1)
                 self.iteration = 0
             except NameError:
@@ -142,7 +133,7 @@ class TablePrinter:
     def make_header(self):
         s = self.prefix + self.make_row_sep() + "\n"
         s += self.prefix
-        for (name, width) in zip(self.names, self.widths):
+        for name, width in zip(self.names, self.widths):
             s += "|" + self.pad_field("%s" % name, width, lj=True)
         s += "|\n"
         return s + self.prefix + self.make_row_sep()
@@ -153,12 +144,12 @@ class TablePrinter:
     def make_values(self, vals):
         assert len(vals) == len(self.fmts)
         s = self.prefix + ""
-        for (val, fmt, width) in zip(vals, self.fmts, self.widths):
+        for val, fmt, width in zip(vals, self.fmts, self.widths):
             s += "|" + self.pad_field(fmt % val, width, lj=False)
         s += "|"
 
         if self.writer is not None:
-            for (name, val) in zip(self.names, vals):
+            for name, val in zip(self.names, vals):
                 self.writer.add_scalar(name, val, self.iteration)
             self.iteration += 1
 
@@ -174,8 +165,7 @@ class TablePrinter:
         print(self.make_values(vals))
 
 
-##$#############################################################################
-##^# solution caching decorator ################################################
+####################################################################################################
 def to_tuple_(arg):
     if isinstance(arg, np.ndarray):
         return arg.tobytes()
@@ -196,7 +186,7 @@ def fn_with_sol_cache(fwd_fn, cache=None):
 
         def fn_with_sol(*args, **kwargs):
             cache, sol_key = fn_with_sol.cache, to_tuple(*args)
-            sol = fwd_fn(*args) if not sol_key in cache else cache[sol_key]
+            sol = fwd_fn(*args) if sol_key not in cache else cache[sol_key]
             cache.setdefault(sol_key, sol)
             return fn_with_sol.fn(sol, *args, **kwargs)
 
@@ -207,8 +197,7 @@ def fn_with_sol_cache(fwd_fn, cache=None):
     return inner_decorator
 
 
-##$#############################################################################
-##^# GPU utils #################################################################
+####################################################################################################
 def print_gpu_mem_status(locals, globals):
     unit = 1e9  # GB
 
@@ -219,7 +208,7 @@ def print_gpu_mem_status(locals, globals):
         return {k: z.numel() * sz(z) / unit for (k, z) in variables.items()}
 
     def print_variables(variables):
-        for (k, z) in odict(
+        for k, z in dict(
             sorted(size_of(variables).items(), key=itemgetter(1), reverse=True)
         ).items():
             print("%010s: %9.4e GB" % (k, z))
@@ -240,9 +229,7 @@ def print_gpu_mem_status(locals, globals):
 
     # global variables second #######################################
     print("GLOBAL VARIABLES:")
-    tensors = {
-        k: z for (k, z) in globals.items() if isinstance(z, torch.Tensor)
-    }
+    tensors = {k: z for (k, z) in globals.items() if isinstance(z, torch.Tensor)}
     print("    requires grad:")
     variables = {k: z for (k, z) in tensors.items() if z.requires_grad}
     print_variables(variables)
@@ -256,6 +243,3 @@ def print_gpu_mem_status(locals, globals):
     print("#" * 80)
 
     return
-
-
-##$#############################################################################

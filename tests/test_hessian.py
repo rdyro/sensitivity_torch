@@ -1,5 +1,4 @@
-################################################################################
-import unittest, pdb, time, os, sys
+import unittest, time
 
 import torch
 
@@ -7,7 +6,8 @@ try:
     import import_header
 except ModuleNotFoundError:
     import tests.import_header
-################################################################################
+
+####################################################################################################
 
 torch.set_default_dtype(torch.float64)
 
@@ -23,15 +23,14 @@ W = CE.solve(X @ p, Y, lam)
 
 VERBOSE = True
 
+
 # we test here 2nd order implicit gradients
 class DpzTest(unittest.TestCase):
     def test_shape_and_val(self):
         if VERBOSE:
             print()
         k_fn = lambda W, p: CE.grad(W, X @ p, Y, lam)
-        Dzk_solve_fn = lambda W, p, rhs=None, T=False: CE.Dzk_solve(
-            W, X @ p, Y, lam, rhs=rhs, T=T
-        )
+        Dzk_solve_fn = lambda W, p, rhs=None, T=False: CE.Dzk_solve(W, X @ p, Y, lam, rhs=rhs, T=T)
         optimizations = dict(Dzk_solve_fn=Dzk_solve_fn)
         Dpz, Dppz = implicit_hessian(k_fn, W, p, optimizations=optimizations)
         self.assertEqual(Dpz.shape, (W.shape + p.shape))
@@ -62,9 +61,7 @@ class DpzTest(unittest.TestCase):
 
         t_ = time.time()
         optimizations = dict(Dzk_solve_fn=Dzk_solve_fn)
-        Dpz1, Dppz1 = implicit_hessian(
-            k_fn, W, p, Dg=v, optimizations=optimizations
-        )
+        Dpz1, Dppz1 = implicit_hessian(k_fn, W, p, Dg=v, optimizations=optimizations)
         if VERBOSE:
             print("Elapsed %9.4e" % (time.time() - t_))
 
@@ -79,9 +76,7 @@ class DpzTest(unittest.TestCase):
         self.assertEqual(Dppz2.shape, p.shape)
 
         eps = 1e-5
-        err_Dpz = torch.norm(
-            Dpz1.reshape(p.numel()) @ jvp_vec.reshape(p.numel()) - Dpz2
-        )
+        err_Dpz = torch.norm(Dpz1.reshape(p.numel()) @ jvp_vec.reshape(p.numel()) - Dpz2)
         err_Dppz = torch.norm(
             Dppz1.reshape((p.numel(), p.numel())) @ jvp_vec.reshape(p.numel())
             - Dppz2.reshape(p.numel())
@@ -93,9 +88,7 @@ class DpzTest(unittest.TestCase):
         self.assertTrue(err_Dppz < eps)
 
     def test_shape_jvp_with_Dzk_solve(self):
-        Dzk_solve_fn = lambda W, p, rhs=None, T=False: CE.Dzk_solve(
-            W, X @ p, Y, lam, rhs=rhs, T=T
-        )
+        Dzk_solve_fn = lambda W, p, rhs=None, T=False: CE.Dzk_solve(W, X @ p, Y, lam, rhs=rhs, T=T)
         self.test_shape_jvp_without_Dzk_solve(Dzk_solve_fn=Dzk_solve_fn)
 
 

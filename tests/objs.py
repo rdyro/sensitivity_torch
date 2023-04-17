@@ -1,5 +1,4 @@
-################################################################################
-import unittest, pdb, time, os, sys, math
+import time, math
 
 import torch, numpy as np
 
@@ -7,10 +6,10 @@ try:
     import import_header
 except ModuleNotFoundError:
     import tests.import_header
-################################################################################
+
+####################################################################################################
 
 from sensitivity_torch.extras.optimization import minimize_lbfgs, minimize_sqp
-from sensitivity_torch.extras.nn_tools import conv
 from sensitivity_torch.differentiation import JACOBIAN, HESSIAN
 from sensitivity_torch.utils import topts
 
@@ -18,13 +17,11 @@ from sensitivity_torch.utils import topts
 def Z2Za(Z, sig, d=None):
     d = Z.shape[-1] // 2 if d is None else d
     dist = Z[:, -d:]
-    return torch.cat(
-        [Z[:, :-d], torch.softmax(-dist / (10.0 ** sig), dim=1)], -1
-    )
+    return torch.cat([Z[:, :-d], torch.softmax(-dist / (10.0**sig), dim=1)], -1)
 
 
 def poly_feat(X, n=1, centers=None):
-    Z = torch.cat([X[..., 0:1] ** 0] + [X ** i for i in range(1, n + 1)], -1)
+    Z = torch.cat([X[..., 0:1] ** 0] + [X**i for i in range(1, n + 1)], -1)
     if centers is not None:
         t_ = time.time()
         dist = torch.norm(X[..., None, :] - centers, axis=-1) / X.shape[-1]
@@ -70,28 +67,20 @@ class LS(OBJ):
 
     def solve(self, Z, Y, lam):
         n = Z.shape[-2]
-        A = torch.transpose(Z, -1, -2) @ Z / n + (10.0 ** lam) * torch.eye(
-            Z.shape[-1], **topts(Z)
-        )
-        return torch.cholesky_solve(
-            torch.transpose(Z, -1, -2) @ Y / n, torch.linalg.cholesky(A)
-        )
+        A = torch.transpose(Z, -1, -2) @ Z / n + (10.0**lam) * torch.eye(Z.shape[-1], **topts(Z))
+        return torch.cholesky_solve(torch.transpose(Z, -1, -2) @ Y / n, torch.linalg.cholesky(A))
 
     def fval(self, W, Z, Y, lam):
         n = Z.shape[-2]
-        return (
-            torch.sum((Z @ W - Y) ** 2) / n + (10.0 ** lam) * torch.sum(W ** 2)
-        ) / 2
+        return (torch.sum((Z @ W - Y) ** 2) / n + (10.0**lam) * torch.sum(W**2)) / 2
 
     def grad(self, W, Z, Y, lam):
         n = Z.shape[-2]
-        return torch.transpose(Z, -1, -2) @ (Z @ W - Y) / n + (10.0 ** lam) * W
+        return torch.transpose(Z, -1, -2) @ (Z @ W - Y) / n + (10.0**lam) * W
 
     def Dzk_solve(self, W, Z, Y, lam, rhs=None, T=False):
         n = Z.shape[-2]
-        A = torch.transpose(Z, -1, -2) @ Z / n + (10.0 ** lam) * torch.eye(
-            Z.shape[-1], **topts(Z)
-        )
+        A = torch.transpose(Z, -1, -2) @ Z / n + (10.0**lam) * torch.eye(Z.shape[-1], **topts(Z))
         rhs_shape = rhs.shape
         rhs = rhs.reshape(A.shape[:-1] + (-1,))
         if T == True:
@@ -124,8 +113,7 @@ class CE(OBJ):
             Yp = np.array(X) @ W
             Yp_aug = cp.hstack([Yp, np.zeros((Yp.shape[-2], 1))])
             obj = (
-                -cp.sum(cp.multiply(np.array(Y)[..., :-1], Yp))
-                + cp.sum(cp.log_sum_exp(Yp_aug, 1))
+                -cp.sum(cp.multiply(np.array(Y)[..., :-1], Yp)) + cp.sum(cp.log_sum_exp(Yp_aug, 1))
             ) / X.shape[-2] + 0.5 * (10.0 ** np.array(lam)) * cp.sum_squares(W)
             prob = cp.Problem(cp.Minimize(obj))
             prob.solve(cp.MOSEK)
@@ -149,9 +137,9 @@ class CE(OBJ):
     def fval(W, X, Y, lam):
         Yp = X @ W
         Yp_aug = CE._Yp_aug(W, X)
-        return (
-            -torch.sum(Y[..., :-1] * Yp) + torch.sum(torch.logsumexp(Yp_aug, -1))
-        ) / X.shape[-2] + 0.5 * torch.sum((10.0 ** lam) * (W ** 2))
+        return (-torch.sum(Y[..., :-1] * Yp) + torch.sum(torch.logsumexp(Yp_aug, -1))) / X.shape[
+            -2
+        ] + 0.5 * torch.sum((10.0**lam) * (W**2))
 
 
 class OPT_with_centers:
@@ -211,14 +199,12 @@ class LS_with_diag(OBJ):
 
         L = lam_diag.reshape((Z.shape[-1], Y.shape[-1]))
         ws = [None for i in range(Y.shape[-1])]
-        A_base = torch.transpose(Z, -1, -2) @ Z / n + (
-            10.0 ** lam0
-        ) * torch.eye(Z.shape[-1], **topts(Z))
+        A_base = torch.transpose(Z, -1, -2) @ Z / n + (10.0**lam0) * torch.eye(
+            Z.shape[-1], **topts(Z)
+        )
         for i in range(Y.shape[-1]):
             A = A_base + torch.diag(10.0 ** L[:, i])
-            ws[i] = torch.linalg.solve(
-                A, torch.transpose(Z, -1, -2) @ Y[:, i] / n
-            )
+            ws[i] = torch.linalg.solve(A, torch.transpose(Z, -1, -2) @ Y[:, i] / n)
         ret = torch.stack(ws, -1)
 
         return ret
@@ -228,8 +214,8 @@ class LS_with_diag(OBJ):
         n = Z.shape[-2]
         return (
             torch.sum((Z @ W - Y) ** 2) / n
-            + torch.sum((10.0 ** lam_diag.reshape(W.shape)) * (W ** 2))
-            + torch.sum((10.0 ** lam0) * (W ** 2))
+            + torch.sum((10.0 ** lam_diag.reshape(W.shape)) * (W**2))
+            + torch.sum((10.0**lam0) * (W**2))
             # + torch.sum((10.0 ** lam_diag.reshape((W.shape[-2], 1))) * (W ** 2))
         ) / 2
 
@@ -266,15 +252,11 @@ class OPT_with_diag(OBJ):
     def fval(self, W, Z, Y, param):
         lam_diag = self.get_params(param)
         fval_ = self.OPT.fval(W, Z, Y, 0.0)
-        return fval_ + 0.5 * torch.sum(
-            (10.0 ** lam_diag).reshape(W.shape) * W ** 2
-        )
+        return fval_ + 0.5 * torch.sum((10.0**lam_diag).reshape(W.shape) * W**2)
 
 
 class OPT_conv:
-    def __init__(
-        self, OPT, in_channels=1, out_channels=1, kernel_size=3, stride=2
-    ):
+    def __init__(self, OPT, in_channels=1, out_channels=1, kernel_size=3, stride=2):
         self.OPT = OPT
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -312,7 +294,6 @@ class OPT_conv:
         Za = Z.reshape((Z.shape[0], self.in_channels, m, n))
         Za = torch.nn.functional.conv2d(Za, C, stride=self.stride)
         Za = Za + C0[..., None, None]
-        #Za = conv(Za, C, C0, stride=(self.stride, self.stride))
         Za = Za.reshape((-1, Za[0, ...].numel()))
         ret = torch.cat([Za[..., 0:1] ** 0, torch.tanh(Za)], -1)
         return ret

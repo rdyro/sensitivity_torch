@@ -1,5 +1,4 @@
-################################################################################
-import unittest, pdb, time
+import unittest
 from functools import reduce
 from operator import mul
 
@@ -7,7 +6,8 @@ try:
     import import_header
 except ModuleNotFoundError:
     import tests.import_header
-################################################################################
+
+####################################################################################################
 
 import torch
 from sensitivity_torch.batch_sensitivity import implicit_jacobian
@@ -28,6 +28,7 @@ p = torch.randn((blen, 3, 6))
 W = OPT.solve(X @ p, Y, lam)
 prod = lambda x: reduce(mul, x, 1)
 
+
 # we test here 1st order implicit gradients
 class DpzTest(unittest.TestCase):
     def test_shapes(self):
@@ -39,9 +40,7 @@ class DpzTest(unittest.TestCase):
         optimizations = {"Dzk_solve_fn": Dzk_solve_fn}
         Dpz = implicit_jacobian(k_fn, W, p)
         Dpz2 = implicit_jacobian(k_fn, W, p, optimizations=optimizations)
-        Dpz3 = torch.stack(
-            [implicit_jacobian_(k_fn, W_, p_) for (W_, p_) in zip(W, p)]
-        )
+        Dpz3 = torch.stack([implicit_jacobian_(k_fn, W_, p_) for (W_, p_) in zip(W, p)])
 
         self.assertEqual(Dpz.shape, (blen,) + W.shape[1:] + p.shape[1:])
         self.assertEqual(Dpz2.shape, (blen,) + W.shape[1:] + p.shape[1:])
@@ -57,9 +56,7 @@ class DpzTest(unittest.TestCase):
 
     def test_batch_jacobian_with_Dg(self):
         k_fn = lambda W, p: OPT.grad(W, X @ p, Y, lam)
-        Dzk_solve_fn = lambda W, p, rhs=None, T=False: OPT.Dzk_solve(
-            W, X @ p, Y, lam, rhs=rhs, T=T
-        )
+        Dzk_solve_fn = lambda W, p, rhs=None, T=False: OPT.Dzk_solve(W, X @ p, Y, lam, rhs=rhs, T=T)
         Dg = torch.randn(W.shape)
         optimizations = {"Dzk_solve_fn": Dzk_solve_fn}
         Dpz1 = implicit_jacobian(k_fn, W, p, optimizations=optimizations)
@@ -74,10 +71,7 @@ class DpzTest(unittest.TestCase):
         eps = max(torch.finfo(Dpz1.dtype).resolution, 1e-9)
 
         Dpz3 = torch.stack(
-            [
-                implicit_jacobian_(k_fn, W_, p_, Dg=Dg_)
-                for (W_, p_, Dg_) in zip(W, p, Dg)
-            ]
+            [implicit_jacobian_(k_fn, W_, p_, Dg=Dg_) for (W_, p_, Dg_) in zip(W, p, Dg)]
         )
         err_Dpz2 = torch.norm(Dpz1 - Dpz2)
         err_Dpz3 = torch.norm(Dpz1 - Dpz3)
@@ -88,9 +82,7 @@ class DpzTest(unittest.TestCase):
     def test_batch_jacobian_with_jvp(self):
         prod = lambda x: reduce(mul, x, 1)
         k_fn = lambda W, p: OPT.grad(W, X @ p, Y, lam)
-        Dzk_solve_fn = lambda W, p, rhs=None, T=False: OPT.Dzk_solve(
-            W, X @ p, Y, lam, rhs=rhs, T=T
-        )
+        Dzk_solve_fn = lambda W, p, rhs=None, T=False: OPT.Dzk_solve(W, X @ p, Y, lam, rhs=rhs, T=T)
         jvp_vec = torch.randn(p.shape)
         optimizations = {"Dzk_solve_fn": Dzk_solve_fn}
         Dpz1 = implicit_jacobian(k_fn, W, p, optimizations=optimizations)

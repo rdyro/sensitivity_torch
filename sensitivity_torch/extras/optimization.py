@@ -1,32 +1,33 @@
-##^# library imports and utils #################################################
-import math, os, pdb, sys, time
+import math
+import pdb
 from typing import Callable, Union, Mapping
 
-import torch, numpy as np
+import torch
 from torch import Tensor
+import numpy as np
 import tqdm as tqdm_module
 import tqdm.notebook
 
 from ..utils import TablePrinter
 
-##$#############################################################################
-##^# Accelerated Gradient Descent ##############################################
+
+####################################################################################################
+
+
 def minimize_agd(
     f_fn: Callable,
     g_fn: Callable,
     *args: Tensor,
     verbose: bool = False,
     verbose_prefix: str = "",
-    max_it: int = 10 ** 3,
+    max_it: int = 10**3,
     ai: float = 1e-1,
     af: float = 1e-2,
     batched: bool = False,
     full_output: bool = False,
     callback_fn: Callable = None,
     use_writer: bool = False,
-    use_tqdm: Union[
-        bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook
-    ] = True,
+    use_tqdm: Union[bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook] = True,
     optimizer: str = "adam",
     optimizer_state: Mapping = None,
     optimizer_opts: Mapping = None,
@@ -60,9 +61,7 @@ def minimize_agd(
         print_fn, rng_wrapper = use_tqdm.write, use_tqdm
 
     assert len(args) > 0
-    assert g_fn is not None or all(
-        [isinstance(arg, torch.Tensor) for arg in args]
-    )
+    assert g_fn is not None or all([isinstance(arg, torch.Tensor) for arg in args])
     args = [arg.clone().detach() for arg in args]
     for arg in args:
         arg.requires_grad = True
@@ -86,7 +85,7 @@ def minimize_agd(
         prefix=verbose_prefix,
         use_writer=use_writer,
     )
-    #args_hist = [[arg.detach().clone() for arg in args]]
+    # args_hist = [[arg.detach().clone() for arg in args]]
     args_hist, grads_hist = [], []
 
     if callback_fn is not None:
@@ -98,47 +97,37 @@ def minimize_agd(
         args_prev = [arg.clone().detach() for arg in args]
         opt.zero_grad()
         if g_fn is None:
-            l = torch.sum(f_fn(*args))
-            l.backward()
+            loss = torch.sum(f_fn(*args))
+            loss.backward()
             if batched:
-                l = l / args[0].shape[0]
+                loss = loss / args[0].shape[0]
         else:
             args_ = [arg for arg in args]
-            l = torch.mean(f_fn(*args_))
+            loss = torch.mean(f_fn(*args_))
             gs = g_fn(*args_)
             gs = gs if isinstance(gs, list) or isinstance(gs, tuple) else [gs]
-            for (arg, g) in zip(args, gs):
+            for arg, g in zip(args, gs):
                 arg.grad = torch.detach(g)
-        g_norm = sum(
-            torch.norm(arg.grad) for arg in args if arg.grad is not None
-        ).detach() / len(args)
+        g_norm = sum(torch.norm(arg.grad) for arg in args if arg.grad is not None).detach() / len(
+            args
+        )
         opt.step()
         if full_output:
             args_hist.append([arg.detach().clone() for arg in args])
             grads_hist.append(
-                [
-                    arg.grad.detach().clone() if arg.grad is not None else None
-                    for arg in args
-                ]
+                [arg.grad.detach().clone() if arg.grad is not None else None for arg in args]
             )
         if callback_fn is not None:
             callback_fn(*args, step=it, optimizer=opt)
         if batched:
             imprv = sum(
-                torch.mean(
-                    torch.norm(
-                        arg_prev - arg, dim=tuple(range(-(arg.ndim - 1), 0))
-                    )
-                )
+                torch.mean(torch.norm(arg_prev - arg, dim=tuple(range(-(arg.ndim - 1), 0))))
                 for (arg, arg_prev) in zip(args, args_prev)
             )
         else:
-            imprv = sum(
-                torch.norm(arg_prev - arg)
-                for (arg, arg_prev) in zip(args, args_prev)
-            )
+            imprv = sum(torch.norm(arg_prev - arg) for (arg, arg_prev) in zip(args, args_prev))
         if verbose or use_writer:
-            values = tp.make_values([it, imprv.detach(), l.detach(), g_norm])
+            values = tp.make_values([it, imprv.detach(), loss.detach(), g_norm])
             if verbose:
                 print_fn(values)
         for pgroup in opt.param_groups:
@@ -156,8 +145,8 @@ def minimize_agd(
         return ret
 
 
-##$#############################################################################
-##^# L-BFGS ####################################################################
+####################################################################################################
+
 def minimize_lbfgs(
     f_fn: Callable,
     g_fn: Callable,
@@ -170,9 +159,7 @@ def minimize_lbfgs(
     full_output: bool = False,
     callback_fn: Callable = None,
     use_writer: bool = False,
-    use_tqdm: Union[
-        bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook
-    ] = True,
+    use_tqdm: Union[bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook] = True,
 ):
     """Minimize a loss function ``f_fn`` with L-BFGS with respect to ``*args``.
     Taken from PyTorch.
@@ -202,16 +189,14 @@ def minimize_lbfgs(
         print_fn, rng_wrapper = use_tqdm.write, use_tqdm
 
     assert len(args) > 0
-    assert g_fn is not None or all(
-        [isinstance(arg, torch.Tensor) for arg in args]
-    )
+    assert g_fn is not None or all([isinstance(arg, torch.Tensor) for arg in args])
     args = [arg.detach().clone() for arg in args]
     for arg in args:
         arg.requires_grad = True
     imprv = float("inf")
     it = 0
     opt = torch.optim.LBFGS(args, lr=lr)
-    #args_hist = [[arg.detach().clone() for arg in args]]
+    # args_hist = [[arg.detach().clone() for arg in args]]
     args_hist, grads_hist = [], []
 
     if callback_fn is not None:
@@ -220,18 +205,18 @@ def minimize_lbfgs(
     def closure():
         opt.zero_grad()
         if g_fn is None:
-            l = torch.sum(f_fn(*args))
-            l.backward()
+            loss = torch.sum(f_fn(*args))
+            loss.backward()
             if batched:
-                l = l / args[0].shape[0]
+                loss = loss / args[0].shape[0]
         else:
             args_ = [arg for arg in args]
-            l = torch.mean(f_fn(*args_))
+            loss = torch.mean(f_fn(*args_))
             gs = g_fn(*args_)
             gs = gs if isinstance(gs, list) or isinstance(gs, tuple) else [gs]
-            for (arg, g) in zip(args, gs):
+            for arg, g in zip(args, gs):
                 arg.grad = torch.detach(g)
-        return l
+        return loss
 
     tp = TablePrinter(
         ["it", "imprv", "loss", "||g||_2"],
@@ -243,37 +228,27 @@ def minimize_lbfgs(
         print_fn(tp.make_header())
     for it in rng_wrapper(range(max_it)):
         args_prev = [arg.detach().clone() for arg in args]
-        l = opt.step(closure)
+        loss = opt.step(closure)
         if full_output:
             args_hist.append([arg.detach().clone() for arg in args])
             grads_hist.append(
-                [
-                    arg.grad.detach().clone() if arg.grad is not None else None
-                    for arg in args
-                ]
+                [arg.grad.detach().clone() if arg.grad is not None else None for arg in args]
             )
         if callback_fn is not None:
             callback_fn(*args)
         if batched:
             imprv = sum(
-                torch.mean(
-                    torch.norm(
-                        arg_prev - arg, dim=tuple(range(-(arg.ndim - 1), 0))
-                    )
-                )
+                torch.mean(torch.norm(arg_prev - arg, dim=tuple(range(-(arg.ndim - 1), 0))))
                 for (arg, arg_prev) in zip(args, args_prev)
             )
         else:
             imprv = sum(
-                torch.norm(arg_prev - arg).detach()
-                for (arg, arg_prev) in zip(args, args_prev)
+                torch.norm(arg_prev - arg).detach() for (arg, arg_prev) in zip(args, args_prev)
             )
         if verbose:
             closure()
-            g_norm = sum(
-                arg.grad.norm().detach() for arg in args if arg.grad is not None
-            )
-            print_fn(tp.make_values([it, imprv.detach(), l.detach(), g_norm]))
+            g_norm = sum(arg.grad.norm().detach() for arg in args if arg.grad is not None)
+            print_fn(tp.make_values([it, imprv.detach(), loss.detach(), g_norm]))
         if imprv < 1e-9:
             break
         it += 1
@@ -289,8 +264,8 @@ def minimize_lbfgs(
         return ret
 
 
-##$#############################################################################
-##^# SQP (own) #################################################################
+####################################################################################################
+
 def _linesearch(
     f,
     x,
@@ -337,7 +312,7 @@ def _positive_factorization_cholesky(H, reg0):
             F = torch.linalg.cholesky(H_reg)
             assert not torch.any(torch.isnan(F))
             break
-        except Exception as e:
+        except Exception:
             reg_it += 1
             reg *= 5e0
             if reg >= 0.99e7:
@@ -349,9 +324,7 @@ def _positive_factorization_cholesky(H, reg0):
 def _positive_factorization_lobpcg(H, reg0):
     H = H.detach()
     if H.shape[-1] < 3:
-        reg = torch.min(
-            torch.linalg.eigvals(H.reshape((H.shape[-1], H.shape[-1]))).real
-        )
+        reg = torch.min(torch.linalg.eigvals(H.reshape((H.shape[-1], H.shape[-1]))).real)
     else:
         reg = torch.lobpcg(H, k=1, largest=False, niter=100, tol=1e-3)[0]
     reg = reg.reshape(-1)[0]
@@ -373,9 +346,7 @@ def minimize_sqp(
     full_output: bool = False,
     callback_fn: Callable = None,
     use_writer: bool = False,
-    use_tqdm: Union[
-        bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook
-    ] = True,
+    use_tqdm: Union[bool, tqdm_module.std.tqdm, tqdm_module.notebook.tqdm_notebook] = True,
 ):
     """Minimize a loss function ``f_fn`` with Unconstrained Sequential Quadratic
     Programming (SQP) with respect to a single ``arg``.
@@ -496,6 +467,3 @@ def minimize_sqp(
         return x_best, x_hist + [x_best.detach().clone()]
     else:
         return x_best
-
-
-###$#############################################################################

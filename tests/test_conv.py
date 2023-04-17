@@ -1,5 +1,4 @@
-################################################################################
-import unittest, pdb, time, os, sys
+import unittest
 
 import torch
 
@@ -7,7 +6,8 @@ try:
     import import_header
 except ModuleNotFoundError:
     import tests.import_header
-################################################################################
+
+####################################################################################################
 
 torch.set_default_dtype(torch.float64)
 
@@ -43,8 +43,7 @@ class DpzTest(unittest.TestCase):
         H = OPT.hess(W, X, Y, *params).reshape((W.numel(), W.numel()))
         rhs = torch.randn((W.numel(), 3))
         err = torch.norm(
-            torch.linalg.solve(H, rhs)
-            - OPT.Dzk_solve(W, X, Y, *params, rhs=rhs, T=False)
+            torch.linalg.solve(H, rhs) - OPT.Dzk_solve(W, X, Y, *params, rhs=rhs, T=False)
         )
         self.assertTrue(err < 1e-9)
         err = torch.norm(

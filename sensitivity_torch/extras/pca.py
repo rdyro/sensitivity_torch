@@ -1,7 +1,9 @@
-import time, os, sys, math, pdb, random
+import time
+import random
 
-import matplotlib.pyplot as plt, numpy as np, torch
-from mpl_toolkits import mplot3d
+import torch
+import matplotlib.pyplot as plt
+import numpy as np
 from tqdm import tqdm
 
 from ..utils import topts
@@ -13,9 +15,7 @@ def assess_convexity(Z):
     # assume square grid
     assert Z.shape[0] == Z.shape[-1]
     rand_pos = lambda: random.randint(1, Z.shape[-1] - 1)
-    is_in = lambda idx: all(
-        idx[i] >= 0 and idx[i] < Z.shape[-1] for i in range(2)
-    )
+    is_in = lambda idx: all(idx[i] >= 0 and idx[i] < Z.shape[-1] for i in range(2))
 
     nb_checks = 1000
     nb_success = 0
@@ -34,9 +34,7 @@ def assess_convexity(Z):
     print("Convexity check succeeded in: %d/%d" % (nb_success, nb_checks))
 
 
-def visualize_landscape(
-    loss_fn, x_hist, N=30, log=True, verbose=False, zoom_scale=1.0
-):
+def visualize_landscape(loss_fn, x_hist, N=30, log=True, verbose=False, zoom_scale=1.0):
     param_shape = x_hist[0].shape
     if isinstance(x_hist, list) or isinstance(x_hist, tuple):
         X = torch.stack(x_hist, 0).reshape((-1, x_hist[0].numel()))
@@ -52,20 +50,12 @@ def visualize_landscape(
     X_projected = (U.T @ X.T).T.detach()  # project onto the first 2 dimensions
 
     scale = 30.0 * zoom_scale * torch.mean(torch.std(X_projected, -2))
-    Xp, Yp = torch.meshgrid(
-        *((torch.linspace(-scale / 2, scale / 2, N, **topts(X)),) * 2)
-    )
+    Xp, Yp = torch.meshgrid(*((torch.linspace(-scale / 2, scale / 2, N, **topts(X)),) * 2))
     pts = torch.stack([Xp.reshape(-1), Yp.reshape(-1)], -1)
     ls = []
     for i in tqdm(range(pts.shape[0])):
         pt = pts[i, :]
-        ls.append(
-            loss_fn(
-                (U @ (pt + X_projected[-1, :]) + X_mean[None, :]).reshape(
-                    param_shape
-                )
-            )
-        )
+        ls.append(loss_fn((U @ (pt + X_projected[-1, :]) + X_mean[None, :]).reshape(param_shape)))
     Zp = torch.stack(ls).reshape(Xp.shape)
     assess_convexity(Zp)
     l_optimal = min(loss_fn(x_hist[-1]), torch.min(Zp))
@@ -93,10 +83,7 @@ def visualize_landscape(
     fig = plt.figure()
     ax = plt.axes(projection="3d")
     X_projected_loss = torch.stack(
-        [
-            loss_fn((U @ pt + X_mean[None, :]).reshape(param_shape))
-            for pt in X_projected
-        ]
+        [loss_fn((U @ pt + X_mean[None, :]).reshape(param_shape)) for pt in X_projected]
     )
 
     if log:
@@ -104,26 +91,10 @@ def visualize_landscape(
     else:
         X_projected_loss = X_projected_loss - l_optimal + 1e-7
 
-    #ax.plot(
-    #    X_projected[:, 0], X_projected[:, 1], X_projected_loss, "ro", alpha=0.5
-    #)
-    #ax.plot(
-    #    X_projected[:, 0], X_projected[:, 1], X_projected_loss, "r", alpha=0.5
-    #)
     ax.plot_surface(Xp, Yp, Zp, cmap=plt.get_cmap("viridis"))
     fig.tight_layout()
 
-    # plt.draw_all()
-    # plt.pause(1e-1)
     return np.stack([Xp, Yp], -1), Zp
-
-
-# def fit_quadratic(X, f):
-#    topts = dict(device=X.device, dtype=X.dtype)
-#    n = X.shape[-1]
-#    L = torch.randn((n, n), **topts)
-#    p = torch.randn((n,), **topts)
-#    loss_fn = lambda z:
 
 if __name__ == "__main__":
     import tensorly as tl

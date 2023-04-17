@@ -1,5 +1,4 @@
-################################################################################
-import unittest, pdb, time, os, sys
+import unittest
 
 import torch
 
@@ -7,7 +6,8 @@ try:
     import import_header
 except ModuleNotFoundError:
     import tests.import_header
-################################################################################
+
+####################################################################################################
 
 torch.set_default_dtype(torch.float64)
 
@@ -21,13 +21,12 @@ lam = 1e-3
 p = torch.randn((3, 6))
 W = CE.solve(X @ p, Y, lam)
 
+
 # we test here 1st order implicit gradients
 class DpzTest(unittest.TestCase):
     def test_shape(self):
         k_fn = lambda W, p: CE.grad(W, X @ p, Y, lam)
-        Dzk_solve_fn = lambda W, p, rhs=None, T=False: CE.Dzk_solve(
-            W, X @ p, Y, lam, rhs=rhs, T=T
-        )
+        Dzk_solve_fn = lambda W, p, rhs=None, T=False: CE.Dzk_solve(W, X @ p, Y, lam, rhs=rhs, T=T)
         optimizations = {
             "Dzk_solve_fn": Dzk_solve_fn,
         }
@@ -42,22 +41,17 @@ class DpzTest(unittest.TestCase):
 
     def test_shape_jvp_with_Dzk_solve(self):
         k_fn = lambda W, p: CE.grad(W, X @ p, Y, lam)
-        Dzk_solve_fn = lambda W, p, rhs=None, T=False: CE.Dzk_solve(
-            W, X @ p, Y, lam, rhs=rhs, T=T
-        )
+        Dzk_solve_fn = lambda W, p, rhs=None, T=False: CE.Dzk_solve(W, X @ p, Y, lam, rhs=rhs, T=T)
         jvp_vec = torch.randn(p.shape)
         optimizations = {
             "Dzk_solve_fn": Dzk_solve_fn,
         }
         Dpz1 = implicit_jacobian(k_fn, W, p, optimizations=optimizations)
-        Dpz2 = implicit_jacobian(
-            k_fn, W, p, jvp_vec=jvp_vec, optimizations=optimizations
-        )
+        Dpz2 = implicit_jacobian(k_fn, W, p, jvp_vec=jvp_vec, optimizations=optimizations)
         self.assertEqual(Dpz2.shape, W.shape)
         eps = 1e-5
         err = torch.norm(
-            Dpz1.reshape((W.numel(), p.numel())) @ jvp_vec.reshape(-1)
-            - Dpz2.reshape(-1)
+            Dpz1.reshape((W.numel(), p.numel())) @ jvp_vec.reshape(-1) - Dpz2.reshape(-1)
         )
         self.assertTrue(err < eps)
 
@@ -69,8 +63,7 @@ class DpzTest(unittest.TestCase):
         self.assertEqual(Dpz2.shape, W.shape)
         eps = 1e-5
         err = torch.norm(
-            Dpz1.reshape((W.numel(), p.numel())) @ jvp_vec.reshape(-1)
-            - Dpz2.reshape(-1)
+            Dpz1.reshape((W.numel(), p.numel())) @ jvp_vec.reshape(-1) - Dpz2.reshape(-1)
         )
         self.assertTrue(err < eps)
 
