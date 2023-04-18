@@ -385,8 +385,7 @@ def generate_optimization_fns(
         normalize_grad: whether to normalize the gradient by its norm
         jit: whether to apply just-in-time (jit) compilation to the functions
     Returns:
-        ``f_fn(*params), g_fn(*params), h_fn(*params)``
-        parameters-only upper/outer level loss, gradient and Hessian.
+        ``f_fn(*params), g_fn(*params), h_fn(*params)`` parameters-only upper/outer level loss, gradient and Hessian.
     """
     sol_cache = dict()
     opt_fn_ = lambda *args, **kwargs: opt_fn(*args, **kwargs).detach()

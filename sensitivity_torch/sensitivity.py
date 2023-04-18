@@ -1,6 +1,6 @@
 from functools import reduce
 from operator import mul
-from typing import Mapping, Callable, Union, Sequence
+from typing import Mapping, Callable, Union, Sequence, Tuple
 from copy import copy
 
 import torch
@@ -373,7 +373,7 @@ def generate_optimization_fns(
     k_fn: Callable,
     normalize_grad: bool = False,
     optimizations: Mapping = None,
-):
+) -> Tuple[Callable, Callable, Callable]:
     """Directly generates upper/outer bilevel program derivative functions.
 
     Args:
@@ -383,8 +383,7 @@ def generate_optimization_fns(
         normalize_grad: whether to normalize the gradient by its norm
         jit: whether to apply just-in-time (jit) compilation to the functions
     Returns:
-        ``f_fn(*params), g_fn(*params), h_fn(*params)``
-        parameters-only upper/outer level loss, gradient and Hessian.
+        ``f_fn(*params), g_fn(*params), h_fn(*params)`` parameters-only upper/outer level loss, gradient and Hessian.
     """
     sol_cache = dict()
     opt_fn_ = lambda *args, **kwargs: opt_fn(*args, **kwargs).detach()

@@ -1,4 +1,0 @@
-Optimization
-============
-
-TODO
