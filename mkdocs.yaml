@@ -23,8 +23,11 @@ repo_name: rdyro/sensitivity_torch
 strict: false
 
 markdown_extensions:
-  toc:
-    toc_depth: 2
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+  - toc:
+      toc_depth: 2
 
 extra_css:
   - _static/custom_css.css
