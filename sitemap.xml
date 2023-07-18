@@ -2,37 +2,97 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://rdyro.github.io/sensitivity_torch/</loc>
-         <lastmod>2023-04-18</lastmod>
+         <lastmod>2023-07-18</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://rdyro.github.io/sensitivity_torch/installation/</loc>
-         <lastmod>2023-04-18</lastmod>
+         <lastmod>2023-07-18</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://rdyro.github.io/sensitivity_torch/tour/</loc>
-         <lastmod>2023-04-18</lastmod>
+         <lastmod>2023-07-18</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
-         <loc>https://rdyro.github.io/sensitivity_torch/api/misc/</loc>
-         <lastmod>2023-04-18</lastmod>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/overview/</loc>
+         <lastmod>2023-07-18</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
-         <loc>https://rdyro.github.io/sensitivity_torch/api/optimization/</loc>
-         <lastmod>2023-04-18</lastmod>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/batch_sensitivity/generate_optimization_fns/</loc>
+         <lastmod>2023-07-18</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
-         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity/</loc>
-         <lastmod>2023-04-18</lastmod>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/batch_sensitivity/implicit_hessian/</loc>
+         <lastmod>2023-07-18</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
-         <loc>https://rdyro.github.io/sensitivity_torch/api/utils/</loc>
-         <lastmod>2023-04-18</lastmod>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/batch_sensitivity/implicit_jacobian/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/differentiation/BATCH_HESSIAN/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/differentiation/BATCH_HESSIAN_DIAG/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/differentiation/BATCH_JACOBIAN/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/differentiation/HESSIAN/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/differentiation/HESSIAN_DIAG/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/differentiation/JACOBIAN/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/extras/optimization/minimize_agd/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/extras/optimization/minimize_lbfgs/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/extras/optimization/minimize_sqp/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/sensitivity/generate_optimization_fns/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/sensitivity/implicit_hessian/</loc>
+         <lastmod>2023-07-18</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://rdyro.github.io/sensitivity_torch/api/sensitivity_torch/sensitivity/implicit_jacobian/</loc>
+         <lastmod>2023-07-18</lastmod>
          <changefreq>daily</changefreq>
     </url>
 </urlset>
