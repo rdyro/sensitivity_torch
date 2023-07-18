@@ -13,6 +13,6 @@ maintain an implementation in [JAX](https://github.com/google/jax)
 
 ---
 
-<p align="left">
-<img width="50%" src="images/icon.png">
+<p align="center">
+    <img src="images/icon.png" style="width:100%; max-width:500px" />
 </p>

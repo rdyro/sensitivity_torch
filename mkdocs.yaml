@@ -9,8 +9,11 @@ theme:
     palette:
         - scheme: default
           primary: deep orange
-    logo: "images/delta.png"  # logo in top left
+    #logo: "images/delta.png"  # logo in top left
+    logo: "images/delta.svg"  # logo in top left
     favicon: "images/delta.svg"
+extra_css:
+    - "extra.css"
 
 site_name: sensitivity_torch
 site_description: The documentation for the sensitivity_torch package.
@@ -29,8 +32,8 @@ markdown_extensions:
   - toc:
       toc_depth: 2
 
-extra_css:
-  - _static/custom_css.css
+hooks:
+    - build_api_ref.py
 
 plugins:
     - search 
@@ -52,8 +55,4 @@ nav:
     - Overview: 'index.md'
     - Installation: 'installation.md'
     - Tour: 'tour.md'
-    - Full API:
-        - 'api/sensitivity.md'
-        - 'api/optimization.md'
-        - 'api/utils.md'
-        - 'api/misc.md'
+    - Full API: 'api/overview.md'
